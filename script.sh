@@ -3,34 +3,42 @@
 ###############################################################################################
 #
 # Author     : Anuj Kumar
-# Date       : 26 Sept 2024
+# Date       : 24 Sept 2024
 # version    : v1
 #
 # This script does the following taks :
 # Firstly generate a resources.txt file based on available resources in your account
-# only works for (IAM users, S3 buckets, EC2 instances, Lambda functions)
 # Next, it store that file in s3 bucket
 # Then using lambda function, file signed url is generated
 # Using lambda function that link is sent to owner using aws ses service
 #
 ###############################################################################################
 
+# log date and time in cron output file
+
+echo -e "============= Execution at $(date '+%Y-%m-%d %H:%M:%S') ============\n"
 
 set -e  # for terminating script if any error occurs
 
+trap 'echo -e "Script Execution Failed!\n\n"' ERR
+
 # declarring variables
 
-FILENAME="resources.txt"                    # file to store resources
-S3_BUCKET="my-script-bucket-anuj"           # bucket to upload file after generation
-LAMBDA_FUNCTION_NAME="send-email-function"  # lambda function name
+FILENAME="resources.txt"
+S3_BUCKET="my-script-bucket-anuj"         # bucket to upload file after generation
+LAMBDA_FUNCTION_NAME="send-email-function"
 
 
 
 # Adding additional details
 
-# Date and Time to add in resource file
+
 echo -e "Date and Time: $(date '+%Y-%m-%d %H:%M:%S')\n\n" > $FILENAME
 
+
+
+
+# Listing all s3 bucket
 
 echo -e "S3 buckets details" >> $FILENAME
 # above line uses redirection operation which will delete the previous
@@ -69,14 +77,13 @@ done
 # product10.jpeg
 
 
-# -e with echo allows us to use \n, \t like escape sequences
+# -e with echo allows us to use \n, \t like things
 
 # List EC2 instances
 
 echo -e "\n\nEC2 instances details\n----------------------------------------" >> $FILENAME
 aws ec2 describe-instances | jq -r '.Reservations[].Instances[] | "\(.InstanceId)\t\(.Tags[] | select(.Key == "Name") | .Value // "N/A")\t\(.Placement.AvailabilityZone)\t\(.State.Name)\t\(.PublicIpAddress // "N/A")" ' | column -t -s $'\t'  >> $FILENAME
-
-# jq -r is used to parse json data
+# jq -r
 # The -r option in jq is used to output raw strings instead of JSON-encoded
 # strings. When you use jq without the -r flag, it formats the output as
 # valid JSON, which includes additional quotes around strings and escape
@@ -95,23 +102,21 @@ aws lambda list-functions | jq -r '.Functions[].FunctionName' >> $FILENAME
 echo -e "\n\nIAM users list\n----------------------------------------" >> $FILENAME
 aws iam list-users | jq -r  '.Users[].UserName' >> $FILENAME
 
-
 # empty bucket before uploading new one
+
 aws s3 rm s3://$S3_BUCKET --recursive
+
+
 
 
 # upload file to aws s3 bucket
 aws s3 cp $FILENAME s3://$S3_BUCKET --content-disposition "attachment; filename=\"$FILENAME\""
 
-# "attachment; filename=\"$FILENAME\"" is used to download file with same name
-# as it was uploaded to s3 bucket  else it will be downloaded with random name
-# like 2024-09-26T12:00:00Z or something like that which is not user friendly
-# so we are using this to download file with same name as it was uploaded
-
 aws lambda invoke --function-name $LAMBDA_FUNCTION_NAME response.json
 
-# response.json will contain the output of lambda function
 
 rm response.json
 
 echo "Script execution success!"
+
+echo -e "\n\n"
